@@ -11,7 +11,8 @@ Sofia Fernandes RA: 22.122.082-5
 
 ## Instruções para rodar o banco
 ```
-
+Inserir string de conexão na linha 81 do código:
+    opts := options.Client().ApplyURI("").SetServerAPIOptions(serverAPI)
 ```
 
 ## Descrição das Collections
