@@ -1,0 +1,258 @@
+//1.
+[
+  {
+    "$lookup": {
+      "from": "disciplina",           // Nome da coleção para junção
+      "localField": "disciplina_id",    // Campo na coleção "historico_escolar"
+      "foreignField": "_id",  // Campo na coleção "disciplinas"
+      "as": "disciplina_detalhes"       // Nome do campo que vai armazenar os dados de "disciplinas"
+    }
+  },
+  {
+    "$unwind": { 
+      "path": "$disciplina_detalhes",  // Desempacota o array de disciplinas
+      "preserveNullAndEmptyArrays": true // Garante que documentos sem disciplina também sejam retornados
+    }
+  },
+  {
+    "$match": { 
+      "aluno_id": ObjectId('6733df9d044c6d4699bba72b')  // Filtra pelo aluno_id
+    }
+  },
+  {
+    "$project": {
+      "disciplina_id": 1, 
+      "nome": "$disciplina_detalhes.nome",  // Nome da disciplina
+      "semestre": 1, 
+      "ano": 1, 
+      "nota_final": 1
+    }
+  }
+]
+
+//2.
+
+[
+  {
+    "$match": {
+      "professor_id": ObjectId('6733df9e044c6d4699bba741')
+    }
+  }
+]
+
+
+//3.
+[
+  // 1. Juntar 'aluno' com 'historico_escolar'
+  {
+    $lookup: {
+      from: "historico_escolar",
+      localField: "aluno_id",
+      foreignField: "aluno_id",
+      as: "historico"
+    }
+  },
+  // 2. Descompactar o array de 'historico'
+  { $unwind: "$historico" },
+  // 3. Filtrar por semestre e ano
+  {
+    $match: {
+      "historico.semestre": 1,
+      "historico.ano": 2012
+    }
+  },
+  // 4. Juntar com 'matriz_curricular'
+  {
+    $lookup: {
+      from: "matriz_curricular",
+      localField: "curso_id",
+      foreignField: "curso_id",
+      as: "matriz"
+    }
+  },
+  // 5. Juntar 'matriz' com 'historico' com disciplina_id
+  {
+    $lookup: {
+      from: "matriz_curricular",
+      localField: "historico.disciplina_id",
+      foreignField: "disciplina_id",
+      as: "matriz_disciplina"
+    }
+  },
+  // 6. Filtrar onde a matriz de disciplina existe
+  { $match: { "matriz_disciplina": { $ne: [] } } },
+  // 7. Aplicar lógica condicional para 'nota_final'
+  {
+    $addFields: {
+      "historico.nota_final": {
+        $cond: {
+          if: { $lt: ["$historico.nota_final", 5] },
+          then: null,
+          else: "$historico.nota_final"
+        }
+      }
+    }
+  },
+  // 8. Verificar se existem disciplinas sem nota final (NOT EXISTS)
+  {
+    $lookup: {
+      from: "historico_escolar",
+      let: { alunoId: "$aluno_id", cursoId: "$curso_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ["$aluno_id", "$$alunoId"] },
+                { $eq: ["$curso_id", "$$cursoId"] },
+                { $eq: ["$nota_final", null] }
+              ]
+            }
+          }
+        }
+      ],
+      as: "disciplinas_sem_nota"
+    }
+  },
+  // 9. Filtrar para garantir que não existem disciplinas com nota_final igual a null
+  {
+    $match: {
+      "disciplinas_sem_nota": { $size: 0 }
+    }
+  },
+  // 10. Projeção final: Selecionando os campos desejados
+  {
+    $project: {
+      nome: 1,
+      aluno_id: 1,
+      curso_id: 1,
+      "historico.disciplina_id": 1,
+      "historico.nota_final": 1,
+      "historico.semestre": 1,
+      "historico.ano": 1
+    }
+  },
+  // 11. Ordenação: Ordenar por aluno_id e disciplina_id
+  {
+    $sort: {
+      aluno_id: 1,
+      "historico.disciplina_id": 1
+    }
+  }
+]
+
+
+
+//4.
+
+[
+  // 1. Realiza o join entre as coleções `professor` e `departamento`
+  {
+    "$lookup": {
+      "from": "professor",         // Coleção que será unida
+      "localField": "chefe_id",     // Campo na coleção `departamento` (chave estrangeira)
+      "foreignField": "_id", // Campo na coleção `professor` (chave primária)
+      "as": "professor_info"        // Resultado do join será armazenado no campo `professor_info`
+    }
+  },
+  
+  // 2. "Desempacota" o array de resultados criado pelo `$lookup`
+  {
+    "$unwind": {
+      "path": "$professor_info",  // Referência ao campo que contém o array gerado pelo `$lookup`
+      "preserveNullAndEmptyArrays": true // Mantém os departamentos que não têm chefe (caso não haja professor)
+    }
+  },
+
+  // 3. Seleciona apenas os campos que desejamos na resposta
+  {
+    "$project": {
+      "professor_id": "$professor_info._id",  // Obtém o ID do professor
+      "nome": "$professor_info.nome",                    // Nome do professor
+      "departamento_nome": "$nome"                        // Nome do departamento
+    }
+  }
+]
+
+
+//5.
+[
+  // 1. Join entre `grupo_tcc` e `aluno` (para aluno1_id)
+  {
+    $lookup: {
+      from: "aluno", // Coleção para unir
+      localField: "aluno1_id", // Campo de `grupo_tcc` para `aluno1_id`
+      foreignField: "_id", // Campo de `aluno` para identificar o aluno
+      as: "aluno1_info", // Resultado do join será armazenado em `aluno1_info`
+    },
+  },
+
+  {
+    $lookup: {
+      from: "aluno", // Coleção para unir
+      localField: "aluno2_id", // Campo de `grupo_tcc` para `aluno2_id`
+      foreignField: "_id", // Campo de `aluno` para identificar o aluno
+      as: "aluno2_info", // Resultado do join será armazenado em `aluno2_info`
+    },
+  },
+
+  // 3. Join entre `grupo_tcc` e `aluno` (para aluno3_id)
+  {
+    "$lookup": {
+      "from": "aluno",                    // Coleção para unir
+      "localField": "aluno3_id",           // Campo de `grupo_tcc` para `aluno3_id`
+      "foreignField": "_id",          // Campo de `aluno` para identificar o aluno
+      "as": "aluno3_info"                  // Resultado do join será armazenado em `aluno3_info`
+    }
+  },
+
+  // 4. Join entre `grupo_tcc` e `professor` (para obter o orientador)
+  {
+    "$lookup": {
+      "from": "professor",                // Coleção para unir
+      "localField": "orientador",          // Campo de `grupo_tcc` para `orientador`
+      "foreignField": "_id",     // Campo de `professor` para identificar o professor
+      "as": "professor_info"              // Resultado do join será armazenado em `professor_info`
+    }
+  },
+
+    // 5. "Unwind" os resultados dos joins com os alunos
+  {
+    "$unwind": {
+      "path": "$aluno1_info",             // Desempacota o array `aluno1_info`
+      "preserveNullAndEmptyArrays": true   // Mantém os alunos com `null` caso o aluno não exista
+    }
+  },
+  {
+    "$unwind": {
+      "path": "$aluno2_info",             // Desempacota o array `aluno2_info`
+      "preserveNullAndEmptyArrays": true   // Mantém os alunos com `null` caso o aluno não exista
+    }
+  },
+  {
+    "$unwind": {
+      "path": "$aluno3_info",             // Desempacota o array `aluno3_info`
+      "preserveNullAndEmptyArrays": true   // Mantém os alunos com `null` caso o aluno não exista
+    }
+  },
+
+  // 6. "Unwind" o resultado do join com o professor
+  {
+    "$unwind": {
+      "path": "$professor_info",          // Desempacota o array `professor_info`
+      "preserveNullAndEmptyArrays": true   // Mantém os grupos TCC sem professor
+    }
+  },
+
+ {
+    "$project": {
+      "tcc_id": 1,                        // Exibe o campo `tcc_id`
+			"aluno1_nome": "$aluno1_info.name",
+			"aluno2_nome": "$aluno2_info.name",
+			"aluno3_nome": "$aluno3_info.name",
+      "professor_nome": "$professor_info.nome"  // Exibe o nome do professor (orientador)
+    }
+  }
+
+]
+
